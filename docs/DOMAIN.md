@@ -4,7 +4,7 @@
 - id?: Int
 - name: String
 - players: Player[]
-- score: Int ? ()
+- score?: Int
 - history: Match[]
 
 # Match
