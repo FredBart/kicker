@@ -8,9 +8,22 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 
 public class Kicker
 {
+
+    static List<string> teamNames = new List<string>();
+    static List<string> playerNames = new List<string>();
+
+
+    static List<Team> teams = new List<Team>();
+    static List<Player> players = new List<Player>();
+    static List<Match> matches = new List<Match>();
+
+    // Allowed characters for team and player names (for now, these should be enough)
+    static string ID_REGEX = "[0-9a-zA-Z]+";
 
     public static void Main()
     {
@@ -18,9 +31,7 @@ public class Kicker
         string testString = "";
         // I know, List isn't the best choice, but right now I just want
         // it to work somehow, no matter how well.
-        List<Team> teams = new List<Team>();
-        List<Player> players = new List<Player>();
-        List<Match> matches = new List<Match>();
+
 
         new WebHostBuilder()
             .UseKestrel()
@@ -38,15 +49,7 @@ public class Kicker
                         var path = req.Path.ToString();
                         if (path.StartsWith("/teams"))
                         {
-                            // Until I have implemented the endpoints,
-                            // this case will return a teapot.
-
-                            // await TeamsEndpoint(req, res);
-                            res.StatusCode = 418;
-                            body = Encoding.UTF8.GetBytes("<h1>This option has not yet been implemented.</h1>");
-                            res.ContentType = "text/html; charset=utf-8";
-                            res.ContentLength = body.LongLength;
-                            await res.Body.WriteAsync(body, 0, body.Length);
+                            await TeamsEndpoint(req, res);
                         }
                         else if (path.StartsWith("/players"))
                         {
@@ -100,6 +103,67 @@ public class Kicker
             .Build()
             .Run();
     }
+
+    // /teams
+    static async Task TeamsEndpoint(HttpRequest req, HttpResponse res)
+    {
+        var segments = req.Path.ToString().Split("/");
+        if (new Regex($"^/teams/{ID_REGEX}$").IsMatch(req.Path))
+        {
+            string name = segments[segments.Length - 1];
+            if (req.Method == "POST")
+            {
+                PostTeam(name, req, res);
+                byte[] body = Encoding.UTF8.GetBytes("<h1>here should be a layout.</h1>");
+                res.ContentType = "text/html; charset=utf-8";
+                res.ContentLength = body.LongLength;
+                await res.Body.WriteAsync(body, 0, body.Length);
+            }
+            else
+            {
+                // For now, I will only allow POST.
+                res.StatusCode = 405;
+            }
+        }
+        else
+        {
+            res.StatusCode = 404;
+        }
+    }
+
+    // POST /teams/$teamId
+    static void PostTeam(string name, HttpRequest req, HttpResponse res)
+    {
+
+        // Old implementation with a team pool.
+        // I will implement it anew.
+
+        if (teamNames.Contains(name))
+        {
+            res.StatusCode = 409;
+        }
+        else
+        {
+            teams.Add(new Team(name));
+            teamNames.Add(name);
+            res.StatusCode = 201;
+        }
+    }
+
+
+    // I have an identical function to find a player inside
+    // the class Team. There is probably a better solution.
+    static Team FindTeam(string teamName, List<Team> teamPool)
+    {
+        Team result = teamPool.Find(
+            delegate (Team t)
+            {
+                return t.name == teamName;
+            }
+        );
+        return result;
+    }
+
     // I have copied the following function entirely from a friend of mine.
     static Task WriteCsv(string csv, HttpResponse res)
     {
@@ -114,7 +178,7 @@ public class Kicker
 public class Team
 {
     public string name;     // name must be unique. Hence no id
-    // public int score;    // I probably won't need a score, since
+                            // public int score;    // I probably won't need a score, since
                             // it's no heavy task to just calculate them,
                             // and this allows for more flexibility.
     public List<Player> members = new List<Player>();
@@ -201,11 +265,15 @@ public class Match
 
     // respective goals
     int goalst1, goalst2;
-    
+
+    // Matches do not have names and hence need id's.
+    public Guid id;
+
     // Constructor
     // No need for edit functions. Just rewrite the parameters manually.
     public Match(Team ta, Team tb, int goalsta, int goalstb)
     {
+        id = Guid.NewGuid();
         t1 = ta;
         t2 = tb;
         goalst1 = goalsta;
